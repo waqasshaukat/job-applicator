@@ -1,0 +1,29 @@
+{
+  "name": "browser-bot",
+  "version": "1.0.0",
+  "description": "AI-powered job application bot using Playwright",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "postinstall": "playwright install chromium"
+  },
+  "keywords": ["job-application", "automation", "playwright", "ai"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "pdf-parse": "^1.1.1",
+    "playwright": "^1.49.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pdf-parse": "^1.1.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
