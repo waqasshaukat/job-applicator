@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { JobMatch, ResumeData, ApplicationResult } from '../types/index.js';
+import { JobMatch, ApplicationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import {
   humanDelay,
@@ -51,7 +51,7 @@ export async function applyOnCurrentPage(
 
   // Step 3: Form fields are pre-filled by Snaphunt, just click Submit
   logger.debug('Modal appeared, form should be pre-filled');
-  await humanDelay(1000, 1500);
+  await humanDelay(2500, 3500);
 
   // Step 4: Click Submit Application button
   const submitted = await clickSnaphuntSubmitButton(page);
@@ -124,7 +124,6 @@ async function clickJobCardByTitle(page: Page, title: string): Promise<boolean> 
 
 export async function applyToJobs(
   matches: JobMatch[],
-  _resume: ResumeData,      // Unused - Snaphunt form is pre-filled
   _resumePath: string,      // Unused - Snaphunt form is pre-filled
   maxApplications: number
 ): Promise<ApplicationResult[]> {
@@ -242,7 +241,7 @@ async function submitSnaphuntApplication(
 
   // Step 4: Form fields are pre-filled by Snaphunt, just click Submit
   logger.debug('Modal appeared, form should be pre-filled');
-  await humanDelay(1000, 1500); // Give time for form to fully load
+  await humanDelay(2500, 3500); // Give time for form to fully load
 
   // Step 5: Click Submit Application button
   const submitted = await clickSnaphuntSubmitButton(page);

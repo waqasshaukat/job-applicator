@@ -19,16 +19,6 @@ export interface JobMatch {
   concerns: string[];
 }
 
-export interface ResumeData {
-  rawText: string;
-  name?: string;
-  email?: string;
-  phone?: string;
-  skills: string[];
-  experience: string[];
-  education: string[];
-}
-
 export interface ApplicationResult {
   jobId: string;
   jobTitle: string;
@@ -40,9 +30,7 @@ export interface ApplicationResult {
 
 export interface BotConfig {
   jobListingUrl: string;
-  resumePath: string;
-  matchThreshold: number;
-  maxApplications: number;
+  maxApplications?: number;
   headless: boolean;
   slowMo: number;
   jobNiches: string[];

@@ -4,7 +4,6 @@ import { Command } from 'commander';
 import { createBotConfig, getSnaphuntCredentials } from './config.js';
 import { logger } from './utils/logger.js';
 import { launchBrowser, closeBrowser, getPage } from './services/browser.js';
-import { parseResume } from './services/resume-parser.js';
 import { scrapeMatchAndApply } from './services/job-scraper.js';
 import { handleLoginIfRequired } from './services/applicator.js';
 
@@ -15,18 +14,14 @@ program
   .description('AI-powered job application bot')
   .version('1.0.0')
   .option('-u, --url <url>', 'Job listing URL', 'https://snaphunt.com/job-listing')
-  .option('-r, --resume <path>', 'Path to resume PDF', './resume/resume.pdf')
-  .option('-t, --threshold <number>', 'Minimum match score (0-100)', '70')
-  .option('-m, --max <number>', 'Maximum applications to submit', '5')
+  .option('-m, --max <number>', 'Maximum applications to submit')
   .option('--headless', 'Run browser in headless mode', false)
   .option('--dry-run', 'Analyze jobs without submitting applications', false)
   .action(runBot);
 
 async function runBot(options: {
   url: string;
-  resume: string;
-  threshold: string;
-  max: string;
+  max?: string;
   headless: boolean;
   dryRun: boolean;
 }): Promise<void> {
@@ -34,16 +29,12 @@ async function runBot(options: {
 
   const config = createBotConfig({
     jobListingUrl: options.url,
-    resumePath: options.resume,
-    matchThreshold: parseInt(options.threshold, 10),
-    maxApplications: parseInt(options.max, 10),
+    maxApplications: options.max ? parseInt(options.max, 10) : undefined,
     headless: options.headless,
   });
 
   logger.info(`Job URL: ${config.jobListingUrl}`);
-  logger.info(`Resume: ${config.resumePath}`);
-  logger.info(`Match threshold: ${config.matchThreshold}%`);
-  logger.info(`Max applications: ${config.maxApplications}`);
+  logger.info(`Max applications: ${config.maxApplications ?? 'all available'}`);
   logger.info(`Niches: ${config.jobNiches.slice(0, 5).join(', ')}...`);
   if (options.dryRun) {
     logger.warn('DRY RUN MODE - No applications will be submitted');
@@ -58,21 +49,17 @@ async function runBot(options: {
   };
 
   try {
-    // Step 1: Parse resume
-    logger.divider('Step 1: Resume Analysis');
-    const resume = await parseResume(config.resumePath);
-
-    // Step 2: Launch browser
-    logger.divider('Step 2: Browser Setup');
+    // Step 1: Launch browser
+    logger.divider('Step 1: Browser Setup');
     await launchBrowser(config);
 
-    // Step 3: Navigate to job listing and handle login
-    logger.divider('Step 3: Login & Navigation');
+    // Step 2: Navigate to job listing and handle login
+    logger.divider('Step 2: Login & Navigation');
     const page = await getPage();
 
     // First navigate to the job listing page
     logger.action(`Navigating to ${config.jobListingUrl}`);
-    await page.goto(config.jobListingUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto(config.jobListingUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
     logger.success('Page loaded');
 
     // Wait for page to fully render
@@ -91,16 +78,15 @@ async function runBot(options: {
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
     } else {
-      logger.warn('No Snaphunt credentials provided - running as guest');
+      console.error('Missing Snaphunt credentials.');
+      process.exit(1);
     }
 
-    // Step 4: Integrated scrape → match → apply flow
-    logger.divider('Step 4: Finding & Applying to Jobs');
+    // Step 3: Integrated scrape → match → apply flow
+    logger.divider('Step 3: Finding & Applying to Jobs');
     const { results, stats: jobStats } = await scrapeMatchAndApply(
       page,
-      resume,
       config.jobNiches,
-      config.matchThreshold,
       config.maxApplications,
       options.dryRun
     );

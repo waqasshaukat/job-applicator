@@ -3,14 +3,6 @@ import { BotConfig, JobListing } from './types/index.js';
 
 dotenv.config();
 
-export function getAnthropicApiKey(): string {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    throw new Error('ANTHROPIC_API_KEY is required. Set it in your .env file.');
-  }
-  return key;
-}
-
 export function getSnaphuntCredentials(): { email?: string; password?: string } {
   return {
     email: process.env.SNAPHUNT_EMAIL,
@@ -52,9 +44,7 @@ export const DEFAULT_JOB_NICHES = [
 export function createBotConfig(options: Partial<BotConfig>): BotConfig {
   return {
     jobListingUrl: options.jobListingUrl || 'https://snaphunt.com/job-listing',
-    resumePath: options.resumePath || './resume/resume.pdf',
-    matchThreshold: options.matchThreshold ?? 70,
-    maxApplications: options.maxApplications ?? 5,
+    maxApplications: options.maxApplications,
     headless: options.headless ?? false, // Visible by default for demo
     slowMo: options.slowMo ?? 50,
     jobNiches: options.jobNiches ?? DEFAULT_JOB_NICHES,

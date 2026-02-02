@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { JobListing, ResumeData, ApplicationResult } from '../types/index.js';
+import { JobListing, ApplicationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import {
   humanDelay,
@@ -11,7 +11,6 @@ import {
   humanBreakBetweenApplications,
 } from '../utils/human.js';
 import { getPage, getContext, navigateTo } from './browser.js';
-import { analyzeJobFitSingle } from './job-matcher.js';
 import { applyOnCurrentPage } from './applicator.js';
 
 /**
@@ -20,10 +19,8 @@ import { applyOnCurrentPage } from './applicator.js';
  */
 export async function scrapeMatchAndApply(
   page: Page,
-  resume: ResumeData,
-  niches: string[],
-  matchThreshold: number,
-  maxApplications: number,
+  _niches: string[],
+  maxApplications?: number,
   dryRun: boolean = false
 ): Promise<{
   results: ApplicationResult[];
@@ -91,7 +88,8 @@ export async function scrapeMatchAndApply(
   const maxNoNewJobsAttempts = 5;
 
   // Main loop: scroll, find jobs, process each one
-  while (appliedCount < maxApplications && noNewJobsCount < maxNoNewJobsAttempts) {
+  const hasMaxApplications = typeof maxApplications === 'number';
+  while ((!hasMaxApplications || appliedCount < maxApplications) && noNewJobsCount < maxNoNewJobsAttempts) {
     // Make sure we're on the listing page
     if (!page.url().includes('/job-listing')) {
       await navigateTo(listingUrl);
@@ -116,20 +114,13 @@ export async function scrapeMatchAndApply(
 
     noNewJobsCount = 0;
 
-    // Filter by niche
-    const nicheJobs = newJobs.filter((job) => {
-      const titleLower = job.title.toLowerCase();
-      return niches.some((niche) => titleLower.includes(niche.toLowerCase()));
-    });
-    filteredJobs += nicheJobs.length;
+    filteredJobs += newJobs.length;
 
-    logger.info(`Found ${newJobs.length} new jobs, ${nicheJobs.length} match niches`);
+    logger.info(`Found ${newJobs.length} new jobs`);
+    logger.info(`Processing ${newJobs.length} jobs...`);
 
-    // Process each niche-matched job
-    logger.info(`Processing ${nicheJobs.length} niche-matched jobs...`);
-
-    for (const job of nicheJobs) {
-      if (appliedCount >= maxApplications) {
+    for (const job of newJobs) {
+      if (hasMaxApplications && appliedCount >= maxApplications) {
         logger.info(`Reached max applications (${maxApplications})`);
         break;
       }
@@ -173,48 +164,35 @@ export async function scrapeMatchAndApply(
 
         logger.debug(`Step 2 DONE: Description length: ${description.length} chars`);
 
-        // Step 3: Send to AI for matching
-        logger.action('Step 3: Sending to AI for job fit analysis...');
-        const match = await analyzeJobFitSingle(detailedJob, resume);
-        logger.debug('Step 3 DONE: AI analysis complete');
+        matchedJobs++;
 
-        logger.match(job.title, job.company, match.score);
-        logger.info(`  ${match.reasoning}`);
+        if (!dryRun) {
+          logger.action(`Applying to ${job.title}...`);
+          const result = await applyOnCurrentPage(detailPage, detailedJob);
+          results.push(result);
 
-        // Step 4: If match is good, apply immediately (on the detail page tab)
-        if (match.score >= matchThreshold) {
-          matchedJobs++;
-
-          if (!dryRun) {
-            logger.action(`Applying to ${job.title}...`);
-            const result = await applyOnCurrentPage(detailPage, detailedJob);
-            results.push(result);
-
-            if (result.status === 'success') {
-              appliedCount++;
-              logger.application(job.title, 'success');
-            } else {
-              logger.application(job.title, result.status);
-              logger.warn(`  ${result.message}`);
-            }
-
-            // Take a break between applications
-            if (appliedCount < maxApplications) {
-              await humanBreakBetweenApplications();
-            }
+          if (result.status === 'success') {
+            appliedCount++;
+            logger.application(job.title, 'success');
           } else {
-            logger.info(`  [DRY RUN] Would apply to this job`);
-            results.push({
-              jobId: job.id,
-              jobTitle: job.title,
-              company: job.company,
-              status: 'skipped',
-              message: 'Dry run - not submitted',
-              timestamp: new Date(),
-            });
+            logger.application(job.title, result.status);
+            logger.warn(`  ${result.message}`);
+          }
+
+          // Take a break between applications
+          if (!hasMaxApplications || appliedCount < maxApplications) {
+            await humanBreakBetweenApplications();
           }
         } else {
-          logger.debug(`Score ${match.score}% below threshold ${matchThreshold}%`);
+          logger.info(`  [DRY RUN] Would apply to this job`);
+          results.push({
+            jobId: job.id,
+            jobTitle: job.title,
+            company: job.company,
+            status: 'skipped',
+            message: 'Dry run - not submitted',
+            timestamp: new Date(),
+          });
         }
 
         // Mark job as processed (prevents re-applying if we see it again)
