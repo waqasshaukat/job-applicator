@@ -34,6 +34,7 @@ export async function scrapeMatchAndApply(
   const listingUrl = page.url();
   const results: ApplicationResult[] = [];
   const seenJobIds = new Set<string>();
+  const processedJobIds = new Set<string>(); // Track jobs we've already processed (to prevent re-applying)
   let totalJobs = 0;
   let filteredJobs = 0;
   let matchedJobs = 0;
@@ -133,6 +134,12 @@ export async function scrapeMatchAndApply(
         break;
       }
 
+      // Skip if we've already processed this job (prevents re-applying after returning to listing)
+      if (processedJobIds.has(job.id)) {
+        logger.debug(`Skipping already processed job: ${job.title}`);
+        continue;
+      }
+
       logger.job(`Processing: ${job.title}`);
       logger.debug(`Job ID: ${job.id}, Company: ${job.company}`);
 
@@ -210,6 +217,9 @@ export async function scrapeMatchAndApply(
           logger.debug(`Score ${match.score}% below threshold ${matchThreshold}%`);
         }
 
+        // Mark job as processed (prevents re-applying if we see it again)
+        processedJobIds.add(job.id);
+
         // Step 5: Close the detail tab and scroll on listing page
         await detailPage.close();
         logger.debug('Closed detail tab');
@@ -220,6 +230,8 @@ export async function scrapeMatchAndApply(
 
       } catch (error) {
         logger.warn(`Error processing ${job.title}: ${error}`);
+        // Mark as processed even on error (to avoid retrying the same job)
+        processedJobIds.add(job.id);
         // Close detail tab if open
         if (detailPage) {
           try {
