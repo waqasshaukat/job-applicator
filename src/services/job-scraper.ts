@@ -21,12 +21,21 @@ export async function scrapeMatchAndApply(
   page: Page,
   _niches: string[],
   maxApplications?: number,
-  dryRun: boolean = false
+  dryRun: boolean = false,
+  signal?: AbortSignal
 ): Promise<{
   results: ApplicationResult[];
   stats: { totalJobs: number; filteredJobs: number; matchedJobs: number };
 }> {
   logger.divider('Scrape → Match → Apply Flow');
+
+  const throwIfAborted = (): void => {
+    if (signal?.aborted) {
+      const error = new Error('Job terminated by user');
+      error.name = 'JobTerminationError';
+      throw error;
+    }
+  };
 
   const listingUrl = page.url();
   const results: ApplicationResult[] = [];
@@ -90,6 +99,7 @@ export async function scrapeMatchAndApply(
   // Main loop: scroll, find jobs, process each one
   const hasMaxApplications = typeof maxApplications === 'number';
   while ((!hasMaxApplications || appliedCount < maxApplications) && noNewJobsCount < maxNoNewJobsAttempts) {
+    throwIfAborted();
     // Make sure we're on the listing page
     if (!page.url().includes('/job-listing')) {
       await navigateTo(listingUrl);
@@ -120,6 +130,7 @@ export async function scrapeMatchAndApply(
     logger.info(`Processing ${newJobs.length} jobs...`);
 
     for (const job of newJobs) {
+      throwIfAborted();
       if (hasMaxApplications && appliedCount >= maxApplications) {
         logger.info(`Reached max applications (${maxApplications})`);
         break;
@@ -137,6 +148,7 @@ export async function scrapeMatchAndApply(
       let detailPage: Page | null = null;
 
       try {
+        throwIfAborted();
         // Step 1: Click the job card - opens in new tab
         logger.debug('Step 1: Clicking job card to open detail page...');
         detailPage = await clickJobCardAndNavigate(page, job.title);
@@ -207,6 +219,9 @@ export async function scrapeMatchAndApply(
         await humanDelay(1000, 2000);
 
       } catch (error) {
+        if (error instanceof Error && error.name === 'JobTerminationError') {
+          throw error;
+        }
         logger.warn(`Error processing ${job.title}: ${error}`);
         // Mark as processed even on error (to avoid retrying the same job)
         processedJobIds.add(job.id);

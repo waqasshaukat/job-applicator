@@ -1,0 +1,154 @@
+import { createBotConfig } from './config.js';
+import { logger } from './utils/logger.js';
+import { launchBrowser, closeBrowser, getPage } from './services/browser.js';
+import { scrapeMatchAndApply } from './services/job-scraper.js';
+import { handleLoginIfRequired } from './services/applicator.js';
+
+export type RunBotOptions = {
+  jobListingUrl: string;
+  maxApplications?: number;
+  headless: boolean;
+  dryRun: boolean;
+  snaphuntEmail: string;
+  snaphuntPassword: string;
+  signal?: AbortSignal;
+};
+
+export async function runBot(options: RunBotOptions): Promise<{
+  resultsCount: number;
+  stats: {
+    totalJobs: number;
+    filteredJobs: number;
+    matchedJobs: number;
+    applied: number;
+    failed: number;
+  };
+}> {
+  if (!options.snaphuntEmail || !options.snaphuntPassword) {
+    throw new Error('Missing Snaphunt credentials.');
+  }
+
+  const abortHandler = async () => {
+    logger.warn('Termination requested. Closing browser...');
+    try {
+      await closeBrowser();
+    } catch {
+      // Ignore cleanup errors
+    }
+  };
+
+  if (options.signal) {
+    if (options.signal.aborted) {
+      await abortHandler();
+      throw new Error('Job terminated by user');
+    }
+    options.signal.addEventListener('abort', abortHandler, { once: true });
+  }
+
+  logger.banner();
+
+  const config = createBotConfig({
+    jobListingUrl: options.jobListingUrl,
+    maxApplications: options.maxApplications,
+    headless: options.headless,
+  });
+
+  logger.info(`Job URL: ${config.jobListingUrl}`);
+  logger.info(`Max applications: ${config.maxApplications ?? 'all available'}`);
+  logger.info(`Niches: ${config.jobNiches.slice(0, 5).join(', ')}...`);
+  if (options.dryRun) {
+    logger.warn('DRY RUN MODE - No applications will be submitted');
+  }
+
+  const stats = {
+    totalJobs: 0,
+    filteredJobs: 0,
+    matchedJobs: 0,
+    applied: 0,
+    failed: 0,
+  };
+
+  try {
+    if (options.signal?.aborted) {
+      throw new Error('Job terminated by user');
+    }
+
+    logger.divider('Step 1: Browser Setup');
+    await launchBrowser(config);
+
+    logger.divider('Step 2: Login & Navigation');
+    const page = await getPage();
+
+    logger.action(`Navigating to ${config.jobListingUrl}`);
+    await page.goto(config.jobListingUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    logger.success('Page loaded');
+
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const loggedIn = await handleLoginIfRequired(page, options.snaphuntEmail, options.snaphuntPassword);
+    if (loggedIn) {
+      logger.action('Refreshing job listing after login...');
+      await page.goto(config.jobListingUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+      logger.debug('Waiting for page to fully load...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+
+    if (options.signal?.aborted) {
+      throw new Error('Job terminated by user');
+    }
+
+    logger.divider('Step 3: Finding & Applying to Jobs');
+    const { results, stats: jobStats } = await scrapeMatchAndApply(
+      page,
+      config.jobNiches,
+      config.maxApplications,
+      options.dryRun,
+      options.signal
+    );
+
+    stats.totalJobs = jobStats.totalJobs;
+    stats.filteredJobs = jobStats.filteredJobs;
+    stats.matchedJobs = jobStats.matchedJobs;
+    stats.applied = results.filter((r) => r.status === 'success').length;
+    stats.failed = results.filter((r) => r.status === 'failed').length;
+
+    await closeBrowser();
+    logger.summary(stats);
+    logger.success('Bot completed successfully!');
+
+    return { resultsCount: results.length, stats };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const isTermination =
+      options.signal?.aborted ||
+      (error instanceof Error && error.name === 'JobTerminationError') ||
+      message.toLowerCase().includes('terminated');
+    if (isTermination) {
+      logger.warn('Job terminated by user.');
+    } else {
+      logger.error(`Bot encountered an error: ${message}`);
+    }
+
+    try {
+      await closeBrowser();
+    } catch {
+      // Ignore cleanup errors
+    }
+
+    logger.summary(stats);
+
+    if (options.signal) {
+      options.signal.removeEventListener('abort', abortHandler);
+    }
+
+    if (isTermination) {
+      return { resultsCount: 0, stats };
+    }
+
+    throw error;
+  } finally {
+    if (options.signal) {
+      options.signal.removeEventListener('abort', abortHandler);
+    }
+  }
+}
