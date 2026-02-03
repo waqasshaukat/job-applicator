@@ -38,7 +38,15 @@ export default function LoginPage() {
       if (signUpError) {
         setError(signUpError.message);
       } else {
-        setMessage("Check your email to verify your account before logging in.");
+        const { error: signInError } = await supabaseClient.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (signInError) {
+          setError(signInError.message);
+        } else {
+          router.replace("/dashboard");
+        }
       }
     } else {
       const { error: signInError } = await supabaseClient.auth.signInWithPassword({
@@ -157,9 +165,7 @@ export default function LoginPage() {
               {loading ? "Please wait..." : mode === "login" ? "Log In" : "Create account"}
             </button>
 
-            <p className="text-xs text-[var(--muted)]">
-              Email verification is required before login. We never store your Snaphunt credentials.
-            </p>
+            <p className="text-xs text-[var(--muted)]">We never store your Snaphunt credentials.</p>
           </form>
         </section>
       </div>
