@@ -17,7 +17,12 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 const jobs = new Map<string, Job>();
-let activeJobId: string | null = null;
+const runningJobs = new Set<string>();
+const maxConcurrentJobs = (() => {
+  const raw = process.env.MAX_CONCURRENT_JOBS ?? '3';
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+})();
 
 function pushLog(job: Job, line: string): void {
   job.logs.push(line);
@@ -36,13 +41,13 @@ function pushStatus(job: Job, status: string): void {
 }
 
 function startLogSink(job: Job): void {
-  logger.setLogSink((entry) => {
+  logger.addLogSink(job.id, (entry) => {
     pushLog(job, entry.message);
   });
 }
 
-function stopLogSink(): void {
-  logger.setLogSink(null);
+function stopLogSink(job: Job): void {
+  logger.removeLogSink(job.id);
 }
 
 app.get('/health', (_req, res) => {
@@ -50,8 +55,10 @@ app.get('/health', (_req, res) => {
 });
 
 app.post('/jobs/start', async (req, res) => {
-  if (activeJobId) {
-    return res.status(409).json({ error: 'A job is already running.' });
+  if (runningJobs.size >= maxConcurrentJobs) {
+    return res.status(429).json({
+      error: `Worker at capacity (${maxConcurrentJobs} concurrent jobs).`,
+    });
   }
 
   const { email, password, jobUrl, maxApplications, headless, dryRun } = req.body ?? {};
@@ -69,7 +76,7 @@ app.post('/jobs/start', async (req, res) => {
   };
 
   jobs.set(job.id, job);
-  activeJobId = job.id;
+  runningJobs.add(job.id);
   startLogSink(job);
 
   pushLog(job, 'Job started.');
@@ -83,30 +90,32 @@ app.post('/jobs/start', async (req, res) => {
     return undefined;
   })();
 
-  runBot({
-    jobListingUrl: jobUrl || 'https://snaphunt.com/job-listing',
-    maxApplications: parsedMaxApplications,
-    headless: typeof headless === 'boolean' ? headless : true,
-    dryRun: typeof dryRun === 'boolean' ? dryRun : false,
-    snaphuntEmail: email,
-    snaphuntPassword: password,
-    signal: job.controller.signal,
-  })
-    .then(() => {
-      job.status = job.controller.signal.aborted ? 'terminated' : 'completed';
-      pushLog(job, 'Job terminated successfully.');
-      pushStatus(job, 'terminated');
+  logger.withJobContext(job.id, () => {
+    runBot({
+      jobListingUrl: jobUrl || 'https://snaphunt.com/job-listing',
+      maxApplications: parsedMaxApplications,
+      headless: typeof headless === 'boolean' ? headless : true,
+      dryRun: typeof dryRun === 'boolean' ? dryRun : false,
+      snaphuntEmail: email,
+      snaphuntPassword: password,
+      signal: job.controller.signal,
     })
-    .catch((error) => {
-      job.status = job.controller.signal.aborted ? 'terminated' : 'failed';
-      pushLog(job, `Job failed: ${error instanceof Error ? error.message : String(error)}`);
-      pushLog(job, 'Job terminated successfully.');
-      pushStatus(job, 'terminated');
-    })
-    .finally(() => {
-      stopLogSink();
-      activeJobId = null;
-    });
+      .then(() => {
+        job.status = job.controller.signal.aborted ? 'terminated' : 'completed';
+        pushLog(job, 'Job terminated successfully.');
+        pushStatus(job, 'terminated');
+      })
+      .catch((error) => {
+        job.status = job.controller.signal.aborted ? 'terminated' : 'failed';
+        pushLog(job, `Job failed: ${error instanceof Error ? error.message : String(error)}`);
+        pushLog(job, 'Job terminated successfully.');
+        pushStatus(job, 'terminated');
+      })
+      .finally(() => {
+        stopLogSink(job);
+        runningJobs.delete(job.id);
+      });
+  });
 
   return res.status(202).json({ jobId: job.id });
 });

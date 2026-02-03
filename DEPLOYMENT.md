@@ -10,6 +10,7 @@
    - `fly launch --name jobpilot-worker --region <closest>`
 3) Set env vars for the worker:
    - `PORT=8787`
+   - `MAX_CONCURRENT_JOBS=3`
 4) Deploy:
    - `fly deploy`
 5) Note the worker URL (e.g., `https://jobpilot-worker.fly.dev`).

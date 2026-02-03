@@ -1,6 +1,7 @@
 /**
  * Colored console logger for demo visibility
  */
+import { AsyncLocalStorage } from 'async_hooks';
 
 // ANSI color codes
 const colors = {
@@ -34,13 +35,17 @@ function formatMessage(prefix: string, color: string, message: string): string {
 
 type LogSink = (entry: { level: string; message: string; timestamp: string }) => void;
 
-let logSink: LogSink | null = null;
+const logSinks = new Map<string, LogSink>();
+const logContext = new AsyncLocalStorage<{ jobId: string }>();
 
 function stripAnsi(input: string): string {
   return input.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
 function emit(level: string, formatted: string): void {
+  const context = logContext.getStore();
+  if (!context) return;
+  const logSink = logSinks.get(context.jobId);
   if (!logSink) return;
   const ts = timestamp();
   const lines = stripAnsi(formatted).split('\n');
@@ -57,8 +62,16 @@ function print(level: string, formatted: string): void {
 }
 
 export const logger = {
-  setLogSink(sink: LogSink | null): void {
-    logSink = sink;
+  addLogSink(jobId: string, sink: LogSink): void {
+    logSinks.set(jobId, sink);
+  },
+
+  removeLogSink(jobId: string): void {
+    logSinks.delete(jobId);
+  },
+
+  withJobContext<T>(jobId: string, fn: () => T): T {
+    return logContext.run({ jobId }, fn);
   },
 
   // General info
