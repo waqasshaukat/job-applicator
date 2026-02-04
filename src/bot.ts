@@ -32,6 +32,8 @@ export async function runBot(options: RunBotOptions): Promise<{
   const abortHandler = async () => {
     logger.warn('Termination requested. Closing browser...');
     try {
+      const page = await getPage();
+      await signOutSnaphunt(page);
       await closeBrowser();
     } catch {
       // Ignore cleanup errors
