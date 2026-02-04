@@ -67,7 +67,11 @@ export default function DashboardPage() {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to start job.");
+        const message = typeof data.error === "string" ? data.error : "Failed to start job.";
+        if (message.toLowerCase().includes("worker at capacity")) {
+          throw new Error("Worker at capacity, try again a few minutes later");
+        }
+        throw new Error(message);
       }
 
       const data = await response.json();
