@@ -350,6 +350,23 @@ async function checkApplicationSuccess(page: Page): Promise<boolean> {
     await humanDelay(500, 1000);
     return true;
   } catch {
+    // If already applied, a "Track application" popup appears
+    const trackModal = page.locator(
+      'div.ui.modal.visible.active div.visible.content:has-text("Track application")'
+    );
+    const trackVisible = await trackModal.isVisible({ timeout: 1000 }).catch(() => false);
+    if (trackVisible) {
+      logger.success('Already applied: Track application popup appeared');
+
+      const closeTrack = page.locator(
+        'div.ui.modal.visible.active i.close.sh-e-remove-2.icon, div.ui.modal.visible.active i.close'
+      );
+      await closeTrack.first().click().catch(() => undefined);
+      logger.debug('Closed track application popup');
+      await humanDelay(500, 1000);
+      return true;
+    }
+
     // Check if there's an error in the modal
     const hasError = await page
       .locator('div.ui.modal.visible.active .error, div.ui.modal.visible.active [class*="error"]')
@@ -440,5 +457,25 @@ export async function handleLoginIfRequired(
   } catch (error) {
     logger.error(`Login error: ${error}`);
     return false;
+  }
+}
+
+export async function signOutSnaphunt(page: Page): Promise<void> {
+  logger.action('Signing out...');
+
+  try {
+    const profileIcon = page.locator('i.icon.sh-circle-10-1.css-hfm1bj').first();
+    await profileIcon.waitFor({ state: 'visible', timeout: 5000 });
+    await humanClick(page, profileIcon);
+    await humanDelay(500, 1000);
+
+    const logoutItem = page.locator('div:has-text("Logout")').first();
+    await logoutItem.waitFor({ state: 'visible', timeout: 5000 });
+    await humanClick(page, logoutItem);
+    await humanDelay(1500, 2500);
+
+    logger.success('Signed out');
+  } catch (error) {
+    logger.warn(`Sign out skipped: ${error}`);
   }
 }

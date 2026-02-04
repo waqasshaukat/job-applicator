@@ -2,7 +2,8 @@ import { createBotConfig } from './config.js';
 import { logger } from './utils/logger.js';
 import { launchBrowser, closeBrowser, getPage } from './services/browser.js';
 import { scrapeMatchAndApply } from './services/job-scraper.js';
-import { handleLoginIfRequired } from './services/applicator.js';
+import { handleLoginIfRequired, signOutSnaphunt } from './services/applicator.js';
+import { humanClick } from './utils/human.js';
 
 export type RunBotOptions = {
   jobListingUrl: string;
@@ -79,19 +80,40 @@ export async function runBot(options: RunBotOptions): Promise<{
     logger.divider('Step 2: Login & Navigation');
     const page = await getPage();
 
-    logger.action(`Navigating to ${config.jobListingUrl}`);
-    await page.goto(config.jobListingUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
-    logger.success('Page loaded');
+    logger.action('Navigating to https://snaphunt.com/');
+    await page.goto('https://snaphunt.com/', { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await page.waitForLoadState('networkidle', { timeout: 90000 }).catch(() => undefined);
+    logger.success('Home page loaded');
 
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const loggedIn = await handleLoginIfRequired(page, options.snaphuntEmail, options.snaphuntPassword);
-    if (loggedIn) {
-      logger.action('Refreshing job listing after login...');
-      await page.goto(config.jobListingUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
-      logger.debug('Waiting for page to fully load...');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+    const signInButton = page.locator('button:has-text("Sign in")').first();
+    const signInVisible = await signInButton.isVisible({ timeout: 8000 }).catch(() => false);
+    if (signInVisible) {
+      logger.action('Sign in button detected, logging in...');
+      await handleLoginIfRequired(page, options.snaphuntEmail, options.snaphuntPassword);
+    } else {
+      const signInCount = await page.locator('button:has-text("Sign in")').count().catch(() => 0);
+      logger.debug(`Sign in button count (all): ${signInCount}`);
+      if (signInCount > 0) {
+        const sampleHtml = await page
+          .locator('button:has-text("Sign in")')
+          .first()
+          .evaluate((el) => el.outerHTML)
+          .catch(() => '');
+        logger.debug(`Sign in button HTML: ${sampleHtml}`);
+      }
+      logger.success('Sign in button not visible, assuming already logged in');
     }
+
+    logger.action('Waiting for candidate dashboard...');
+    await page.waitForURL('**/candidateDashboard**', { timeout: 60000 }).catch(() => undefined);
+    await page.waitForSelector('div.side-navigator-label:has-text("Jobs")', { timeout: 15000 });
+    await humanClick(page, page.locator('div.side-navigator-label:has-text("Jobs")').first());
+
+    logger.action('Navigating to job listing...');
+    await page.waitForURL('**/job-listing**', { timeout: 60000 });
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     if (options.signal?.aborted) {
       throw new Error('Job terminated by user');
@@ -112,6 +134,8 @@ export async function runBot(options: RunBotOptions): Promise<{
     stats.applied = results.filter((r) => r.status === 'success').length;
     stats.failed = results.filter((r) => r.status === 'failed').length;
 
+    await signOutSnaphunt(page);
+    await new Promise(resolve => setTimeout(resolve, 2000));
     await closeBrowser();
     logger.summary(stats);
     logger.success('Bot completed successfully!');
