@@ -78,7 +78,7 @@ export async function runBot(options: RunBotOptions): Promise<{
     const page = await getPage();
 
     logger.action('Navigating to https://snaphunt.com/');
-    await page.goto('https://snaphunt.com/', { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await page.goto('https://snaphunt.com/', { waitUntil: 'domcontentloaded', timeout: 180000 });
     await page.waitForLoadState('networkidle', { timeout: 90000 }).catch(() => undefined);
     logger.success('Home page loaded');
 
