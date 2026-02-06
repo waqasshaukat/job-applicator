@@ -68,7 +68,7 @@ export default function LoginPage() {
       <div className="w-full max-w-4xl grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="rounded-3xl border border-white/10 bg-[var(--panel)]/80 p-10 shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
           <p className="text-sm uppercase tracking-[0.3em] text-[var(--accent-2)]">{appName}</p>
-          <h1 className="mt-4 text-4xl font-semibold leading-tight">Run your job applications with confidence.</h1>
+          <h1 className="mt-4 text-4xl font-semibold leading-tight">Apply to dozens of jobs automatically — without the busywork.</h1>
           <p className="mt-4 text-base text-[var(--muted)]">
             Securely log in, connect your Snaphunt account, and watch each automation step live.
           </p>
