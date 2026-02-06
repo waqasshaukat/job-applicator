@@ -23,6 +23,8 @@ export default function DashboardPage() {
   const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
   const logEndRef = useRef<HTMLDivElement | null>(null);
+  const logsRef = useRef<string[]>([]);
+  const offsetRef = useRef(0);
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => {
@@ -41,6 +43,18 @@ export default function DashboardPage() {
     }
   }, [logs]);
 
+  useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  const appendLog = (line: string) => {
+    setLogs((prev) => {
+      const next = [...prev, line];
+      logsRef.current = next;
+      return next;
+    });
+  };
+
   const canStart = useMemo(() => {
     return !!sessionToken && provider === "snaphunt" && !jobId && !starting;
   }, [sessionToken, provider, jobId, starting]);
@@ -49,6 +63,8 @@ export default function DashboardPage() {
     if (!sessionToken) return;
     setStarting(true);
     setLogs([]);
+    logsRef.current = [];
+    offsetRef.current = 0;
     setStreamStatus("running");
 
     try {
@@ -81,7 +97,7 @@ export default function DashboardPage() {
       setStreamStatus("running");
     } catch (error) {
       setStreamStatus("error");
-      setLogs((prev) => [...prev, `Error: ${error instanceof Error ? error.message : String(error)}`]);
+      appendLog(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setStarting(false);
     }
@@ -105,68 +121,56 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!sessionToken || !jobId) return;
 
-    const controller = new AbortController();
+    let cancelled = false;
+    let inFlight = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    const streamLogs = async () => {
+    const pollLogs = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
       try {
-        const response = await fetch(`/api/jobs/${jobId}/stream`, {
+        const response = await fetch(`/api/jobs/${jobId}/logs?offset=${offsetRef.current}`, {
           headers: {
             Authorization: `Bearer ${sessionToken}`,
           },
-          signal: controller.signal,
         });
 
-        if (!response.ok || !response.body) {
-          throw new Error("Unable to stream logs.");
+        if (!response.ok) {
+          throw new Error("Unable to fetch logs.");
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          const events = buffer.split("\n\n");
-          buffer = events.pop() || "";
-
-          for (const eventBlock of events) {
-            const lines = eventBlock.split("\n");
-            let event = "message";
-            let data = "";
-
-            for (const line of lines) {
-              if (line.startsWith("event:")) {
-                event = line.replace("event:", "").trim();
-              }
-              if (line.startsWith("data:")) {
-                data += line.replace("data:", "").trim();
-              }
-            }
-
-            const payload = data.replace(/\\n/g, "\n");
-            if (event === "log") {
-              setLogs((prev) => [...prev, payload]);
-            }
-            if (event === "status" && payload === "terminated") {
-              setStreamStatus("terminated");
-            }
-          }
+        const data = await response.json().catch(() => ({}));
+        if (Array.isArray(data.lines) && data.lines.length > 0) {
+          setLogs((prev) => {
+            const next = [...prev, ...data.lines];
+            logsRef.current = next;
+            return next;
+          });
+        }
+        if (typeof data.nextOffset === "number") {
+          offsetRef.current = data.nextOffset;
+        }
+        if (typeof data.status === "string" && data.status !== "running") {
+          setStreamStatus("terminated");
+          if (pollTimer) clearInterval(pollTimer);
+          return;
         }
       } catch (error) {
-        if (!controller.signal.aborted) {
+        if (!cancelled) {
           setStreamStatus("error");
-          setLogs((prev) => [...prev, `Error: ${error instanceof Error ? error.message : String(error)}`]);
+          appendLog(`Error: ${error instanceof Error ? error.message : String(error)}`);
         }
+      } finally {
+        inFlight = false;
       }
     };
 
-    streamLogs();
+    pollLogs();
+    pollTimer = setInterval(pollLogs, 5000);
 
     return () => {
-      controller.abort();
+      cancelled = true;
+      if (pollTimer) clearInterval(pollTimer);
     };
   }, [sessionToken, jobId]);
 

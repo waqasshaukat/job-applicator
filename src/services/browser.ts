@@ -90,18 +90,33 @@ export async function closeBrowser(): Promise<void> {
   logger.action('Closing browser...');
 
   if (page) {
-    await page.close();
-    page = null;
+    try {
+      await page.close();
+    } catch {
+      // Ignore close errors (page may already be closed)
+    } finally {
+      page = null;
+    }
   }
 
   if (context) {
-    await context.close();
-    context = null;
+    try {
+      await context.close();
+    } catch {
+      // Ignore close errors (context may already be closed)
+    } finally {
+      context = null;
+    }
   }
 
   if (browser) {
-    await browser.close();
-    browser = null;
+    try {
+      await browser.close();
+    } catch {
+      // Ignore close errors (browser may already be closed)
+    } finally {
+      browser = null;
+    }
   }
 
   logger.success('Browser closed');

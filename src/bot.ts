@@ -25,19 +25,14 @@ export async function runBot(options: RunBotOptions): Promise<{
     failed: number;
   };
 }> {
+  let abortRequested = false;
   if (!options.snaphuntEmail || !options.snaphuntPassword) {
     throw new Error('Missing Snaphunt credentials.');
   }
 
   const abortHandler = async () => {
-    logger.warn('Termination requested. Closing browser...');
-    try {
-      const page = await getPage();
-      await signOutSnaphunt(page);
-      await closeBrowser();
-    } catch {
-      // Ignore cleanup errors
-    }
+    abortRequested = true;
+    logger.warn('Termination requested. Aborting run...');
   };
 
   if (options.signal) {
@@ -88,6 +83,9 @@ export async function runBot(options: RunBotOptions): Promise<{
     logger.success('Home page loaded');
 
     await new Promise(resolve => setTimeout(resolve, 2000));
+    if (options.signal?.aborted || abortRequested) {
+      throw new Error('Job terminated by user');
+    }
 
     const signInButton = page.locator('button:has-text("Sign in")').first();
     const signInVisible = await signInButton.isVisible({ timeout: 8000 }).catch(() => false);
@@ -117,7 +115,7 @@ export async function runBot(options: RunBotOptions): Promise<{
     await page.waitForURL('**/job-listing**', { timeout: 60000 });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    if (options.signal?.aborted) {
+    if (options.signal?.aborted || abortRequested) {
       throw new Error('Job terminated by user');
     }
 
@@ -147,6 +145,7 @@ export async function runBot(options: RunBotOptions): Promise<{
     const message = error instanceof Error ? error.message : String(error);
     const isTermination =
       options.signal?.aborted ||
+      abortRequested ||
       (error instanceof Error && error.name === 'JobTerminationError') ||
       message.toLowerCase().includes('terminated');
     if (isTermination) {

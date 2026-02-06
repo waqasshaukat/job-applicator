@@ -5,7 +5,7 @@ Add a Next.js UI that lets users log in, select Snaphunt, enter Snaphunt credent
 
 ## Key Decisions
 - UI framework: Next.js
-- Log streaming: SSE (Server-Sent Events)
+- Log delivery: polling (5s interval) via JSON endpoint
 - Stop control: POST endpoint (immediate stop)
 - Snaphunt credentials: used in-memory only, never stored
 
@@ -24,8 +24,9 @@ Add a Next.js UI that lets users log in, select Snaphunt, enter Snaphunt credent
 2) POST /api/jobs/start
    - Body: { provider: "snaphunt", email, password, jobUrl? }
    - Starts job runner and returns jobId
-3) GET /api/jobs/:id/stream (SSE)
-   - Streams logs to the user in real-time
+3) GET /api/jobs/:id/logs?offset=0
+   - Returns JSON: { lines, nextOffset, status }
+   - Used by UI polling to append new lines every 5 seconds
 4) POST /api/jobs/:id/end
    - Terminates the job immediately
    - Emits termination log message
@@ -33,7 +34,7 @@ Add a Next.js UI that lets users log in, select Snaphunt, enter Snaphunt credent
 
 ## Refactor Requirements (Bot)
 - Accept Snaphunt credentials via runtime input (not .env)
-- Inject a logger sink that can stream to SSE
+- Inject a logger sink that can store logs for polling
 - Expose a job controller to allow external stop signal
 - Ensure cleanup on stop (close browser, end process)
 
@@ -44,8 +45,8 @@ Add a Next.js UI that lets users log in, select Snaphunt, enter Snaphunt credent
 
 ## Next Steps
 1) Scaffold Next.js app and auth
-2) Implement SSE log streaming
+2) Implement polling log endpoint
 3) Implement job start + stop endpoints
 4) Wire UI to backend APIs
-5) Connect job runner to SSE + stop signal
+5) Connect job runner to log polling + stop signal
 6) Add termination message + disable End button

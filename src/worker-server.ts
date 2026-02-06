@@ -158,6 +158,24 @@ app.get('/jobs/:id/stream', (req, res) => {
   });
 });
 
+app.get('/jobs/:id/logs', (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found.' });
+  }
+
+  const offsetParam = Array.isArray(req.query.offset) ? req.query.offset[0] : req.query.offset;
+  const offset = Math.max(0, Number.parseInt(String(offsetParam ?? '0'), 10) || 0);
+  const lines = offset > 0 ? job.logs.slice(offset) : job.logs;
+  const nextOffset = offset + lines.length;
+
+  return res.json({
+    lines,
+    nextOffset,
+    status: job.status,
+  });
+});
+
 app.post('/jobs/:id/end', (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) {
