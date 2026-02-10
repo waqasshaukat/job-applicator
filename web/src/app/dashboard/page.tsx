@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const logsRef = useRef<string[]>([]);
   const offsetRef = useRef(0);
   const capacityNotifiedRef = useRef(false);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => {
@@ -167,6 +168,71 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    if (!sessionToken || !jobId || streamStatus !== "running") return;
+
+    let cancelled = false;
+
+    const sendHeartbeat = async () => {
+      if (cancelled) return;
+      try {
+        await fetch(`/api/jobs/${jobId}/heartbeat`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+          },
+        });
+      } catch {
+        // Ignore heartbeat errors; worker will timeout if we lose connectivity.
+      }
+    };
+
+    sendHeartbeat();
+    heartbeatTimerRef.current = setInterval(sendHeartbeat, 15000);
+
+    return () => {
+      cancelled = true;
+      if (heartbeatTimerRef.current) {
+        clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+      }
+    };
+  }, [sessionToken, jobId, streamStatus]);
+
+  useEffect(() => {
+    if (!sessionToken || !jobId) return;
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        fetch(`/api/jobs/${jobId}/heartbeat`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          keepalive: true,
+        }).catch(() => undefined);
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      fetch(`/api/jobs/${jobId}/end`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [sessionToken, jobId]);
+
+  useEffect(() => {
     if (!sessionToken || !jobId) return;
 
     let cancelled = false;
@@ -205,6 +271,10 @@ export default function DashboardPage() {
         }
         if (typeof data.status === "string" && data.status !== "running") {
           setStreamStatus("terminated");
+          if (heartbeatTimerRef.current) {
+            clearInterval(heartbeatTimerRef.current);
+            heartbeatTimerRef.current = null;
+          }
           if (pollTimer) clearInterval(pollTimer);
           return;
         }

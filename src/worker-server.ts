@@ -11,6 +11,7 @@ type Job = {
   logs: string[];
   listeners: Set<{ send: (event: string, data: string) => void; end: () => void }>;
   controller: AbortController;
+  lastHeartbeat: number;
 };
 
 const app = express();
@@ -22,6 +23,12 @@ const maxConcurrentJobs = (() => {
   const raw = process.env.MAX_CONCURRENT_JOBS ?? '3';
   const parsed = Number.parseInt(raw, 10);
   return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+})();
+
+const heartbeatTimeoutMs = (() => {
+  const raw = process.env.JOB_HEARTBEAT_TIMEOUT_MS ?? '90000';
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) || parsed < 10000 ? 90000 : parsed;
 })();
 
 function pushLog(job: Job, line: string): void {
@@ -62,6 +69,20 @@ app.get('/jobs/status', (_req, res) => {
   });
 });
 
+app.post('/jobs/:id/heartbeat', (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found.' });
+  }
+
+  if (job.status !== 'running') {
+    return res.status(409).json({ error: `Job is ${job.status}.` });
+  }
+
+  job.lastHeartbeat = Date.now();
+  return res.status(202).json({ ok: true });
+});
+
 app.post('/jobs/start', async (req, res) => {
   if (runningJobs.size >= maxConcurrentJobs) {
     return res.status(429).json({
@@ -81,6 +102,7 @@ app.post('/jobs/start', async (req, res) => {
     logs: [],
     listeners: new Set(),
     controller: new AbortController(),
+    lastHeartbeat: Date.now(),
   };
 
   jobs.set(job.id, job);
@@ -199,6 +221,22 @@ app.post('/jobs/:id/end', (req, res) => {
 
   return res.status(202).json({ ok: true });
 });
+
+setInterval(() => {
+  const now = Date.now();
+  for (const job of jobs.values()) {
+    if (job.status !== 'running') {
+      continue;
+    }
+    if (now - job.lastHeartbeat <= heartbeatTimeoutMs) {
+      continue;
+    }
+    job.status = 'terminated';
+    pushLog(job, 'No heartbeat received; terminating job.');
+    job.controller.abort();
+    pushStatus(job, 'terminated');
+  }
+}, Math.min(heartbeatTimeoutMs, 30000));
 
 const port = process.env.PORT ? Number(process.env.PORT) : 8787;
 app.listen(port, () => {
