@@ -422,6 +422,46 @@ export async function handleLoginIfRequired(
     logger.debug('Login popup appeared');
     await humanDelay(500, 1000);
 
+    try {
+      const currentUrl = page.url();
+      const emailVisible = await page
+        .locator('input[placeholder="Email"]')
+        .first()
+        .isVisible({ timeout: 300000 })
+        .catch(() => false);
+      const passwordVisible = await page
+        .locator('input[placeholder="Password"][type="password"]')
+        .first()
+        .isVisible({ timeout: 300000 })
+        .catch(() => false);
+      logger.debug(`Login popup URL: ${currentUrl}`);
+      logger.debug(`Email input visible: ${emailVisible}`);
+      logger.debug(`Password input visible: ${passwordVisible}`);
+    } catch (checkError) {
+      logger.warn(
+        `Login popup diagnostics failed: ${checkError instanceof Error ? checkError.message : String(checkError)}`
+      );
+    }
+
+    try {
+      const artifactsDir = path.join(process.cwd(), 'artifacts', 'login');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const screenshotPath = path.join(artifactsDir, `login-popup-${stamp}.png`);
+      const htmlPath = path.join(artifactsDir, `login-popup-${stamp}.html`);
+
+      await fs.mkdir(artifactsDir, { recursive: true });
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+      logger.warn(`Saved login popup screenshot: ${screenshotPath}`);
+
+      const html = await page.content();
+      await fs.writeFile(htmlPath, html, 'utf8');
+      logger.warn(`Saved login popup HTML: ${htmlPath}`);
+    } catch (captureError) {
+      logger.warn(
+        `Failed to capture login popup artifacts: ${captureError instanceof Error ? captureError.message : String(captureError)}`
+      );
+    }
+
     // Fill email field
     const emailField = page.locator('input[placeholder="Email"]').first();
     logger.debug('Filling email field');
