@@ -22,9 +22,11 @@ export default function DashboardPage() {
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [atCapacity, setAtCapacity] = useState(false);
   const logEndRef = useRef<HTMLDivElement | null>(null);
   const logsRef = useRef<string[]>([]);
   const offsetRef = useRef(0);
+  const capacityNotifiedRef = useRef(false);
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => {
@@ -56,8 +58,51 @@ export default function DashboardPage() {
   };
 
   const canStart = useMemo(() => {
-    return !!sessionToken && provider === "snaphunt" && !jobId && !starting;
-  }, [sessionToken, provider, jobId, starting]);
+    return !!sessionToken && provider === "snaphunt" && !jobId && !starting && !atCapacity;
+  }, [sessionToken, provider, jobId, starting, atCapacity]);
+
+  useEffect(() => {
+    if (!sessionToken || jobId) return;
+
+    let cancelled = false;
+
+    const checkCapacity = async () => {
+      try {
+        const response = await fetch("/api/jobs/status", {
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        const atLimit = Boolean(data.atCapacity);
+        if (cancelled) return;
+
+        setAtCapacity(atLimit);
+        if (atLimit && !capacityNotifiedRef.current) {
+          appendLog("We are running at capacity now. Please try later.");
+          capacityNotifiedRef.current = true;
+        }
+        if (!atLimit) {
+          capacityNotifiedRef.current = false;
+        }
+      } catch {
+        // Ignore capacity check errors
+      }
+    };
+
+    checkCapacity();
+    const timer = setInterval(checkCapacity, 15000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [sessionToken, jobId]);
 
   const startJob = async () => {
     if (!sessionToken) return;
@@ -85,6 +130,9 @@ export default function DashboardPage() {
         const data = await response.json().catch(() => ({}));
         const message = typeof data.error === "string" ? data.error : "Failed to start job.";
         if (message.toLowerCase().includes("worker at capacity")) {
+          setAtCapacity(true);
+          appendLog("We are running at capacity now. Please try later.");
+          capacityNotifiedRef.current = true;
           throw new Error("Worker at capacity, try again a few minutes later");
         }
         throw new Error(message);
@@ -257,11 +305,17 @@ export default function DashboardPage() {
               {logs.length === 0 ? (
                 <p className="text-[var(--muted)]">Logs will appear here after the job starts.</p>
               ) : (
-                logs.map((line, index) => (
-                  <div key={`${index}-${line}`} className="whitespace-pre-wrap">
-                    {line}
-                  </div>
-                ))
+                logs.map((line, index) => {
+                  const isCapacity = line.trim() === "We are running at capacity now. Please try later.";
+                  return (
+                    <div
+                      key={`${index}-${line}`}
+                      className={`whitespace-pre-wrap ${isCapacity ? "text-red-400" : ""}`}
+                    >
+                      {line}
+                    </div>
+                  );
+                })
               )}
               <div ref={logEndRef} />
             </div>

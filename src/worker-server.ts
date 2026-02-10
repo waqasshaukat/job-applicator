@@ -54,6 +54,14 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/jobs/status', (_req, res) => {
+  return res.json({
+    runningJobs: runningJobs.size,
+    maxConcurrentJobs,
+    atCapacity: runningJobs.size >= maxConcurrentJobs,
+  });
+});
+
 app.post('/jobs/start', async (req, res) => {
   if (runningJobs.size >= maxConcurrentJobs) {
     return res.status(429).json({
