@@ -1,5 +1,3 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { Page } from 'playwright';
 import { JobMatch, ApplicationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
@@ -442,25 +440,6 @@ export async function handleLoginIfRequired(
     } catch (checkError) {
       logger.warn(
         `Login popup diagnostics failed: ${checkError instanceof Error ? checkError.message : String(checkError)}`
-      );
-    }
-
-    try {
-      const artifactsDir = path.join(process.cwd(), 'artifacts', 'login');
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const screenshotPath = path.join(artifactsDir, `login-popup-${stamp}.png`);
-      const htmlPath = path.join(artifactsDir, `login-popup-${stamp}.html`);
-
-      await fs.mkdir(artifactsDir, { recursive: true });
-      await page.screenshot({ path: screenshotPath, fullPage: true });
-      logger.warn(`Saved login popup screenshot: ${screenshotPath}`);
-
-      const html = await page.content();
-      await fs.writeFile(htmlPath, html, 'utf8');
-      logger.warn(`Saved login popup HTML: ${htmlPath}`);
-    } catch (captureError) {
-      logger.warn(
-        `Failed to capture login popup artifacts: ${captureError instanceof Error ? captureError.message : String(captureError)}`
       );
     }
 
