@@ -424,11 +424,13 @@ export async function handleLoginIfRequired(
 
     // Fill email field
     const emailField = page.locator('input[placeholder="Email"]').first();
+    logger.debug('Filling email field');
     await humanFillInput(page, emailField, email);
     await humanDelay(300, 600);
 
     // Fill password field
     const passwordField = page.locator('input[placeholder="Password"][type="password"]');
+    logger.debug('Filling password field');
     await humanFillInput(page, passwordField, password);
     await humanDelay(300, 600);
 
