@@ -146,6 +146,11 @@ export default function DashboardPage() {
             logsRef.current = next;
             return next;
           });
+          if (data.lines.some((line: string) => line.includes("Termination requested."))) {
+            setStreamStatus("terminated");
+            if (pollTimer) clearInterval(pollTimer);
+            return;
+          }
         }
         if (typeof data.nextOffset === "number") {
           offsetRef.current = data.nextOffset;
