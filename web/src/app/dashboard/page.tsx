@@ -356,7 +356,7 @@ export default function DashboardPage() {
               disabled={!canStart}
               className="mt-6 w-full rounded-2xl bg-[var(--accent)] px-4 py-3 text-base font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
             >
-              {jobId ? "Job in progress" : "Start Job"}
+              {jobId ? "Job in progress" : "Start"}
             </button>
           </div>
 
