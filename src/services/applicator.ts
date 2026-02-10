@@ -1,3 +1,5 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { Page } from 'playwright';
 import { JobMatch, ApplicationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
