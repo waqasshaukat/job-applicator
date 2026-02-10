@@ -150,7 +150,7 @@ export async function runBot(options: RunBotOptions): Promise<{
       page.off('requestfailed', onRequestFailed);
       page.off('console', onConsole);
     }
-    await page.waitForLoadState('networkidle', { timeout: 90000 }).catch(() => undefined);
+    await page.waitForLoadState('networkidle', { timeout: 300000 }).catch(() => undefined);
     logger.success('Home page loaded');
 
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -159,7 +159,7 @@ export async function runBot(options: RunBotOptions): Promise<{
     }
 
     const signInButton = page.locator('button:has-text("Sign in")').first();
-    const signInVisible = await signInButton.isVisible({ timeout: 8000 }).catch(() => false);
+    const signInVisible = await signInButton.isVisible({ timeout: 300000 }).catch(() => false);
     if (signInVisible) {
       logger.action('Sign in button detected, logging in...');
       await handleLoginIfRequired(page, options.snaphuntEmail, options.snaphuntPassword);
@@ -178,12 +178,45 @@ export async function runBot(options: RunBotOptions): Promise<{
     }
 
     logger.action('Waiting for candidate dashboard...');
-    await page.waitForURL('**/candidateDashboard**', { timeout: 60000 }).catch(() => undefined);
-    await page.waitForSelector('div.side-navigator-label:has-text("Jobs")', { timeout: 15000 });
+    await page.waitForURL('**/candidateDashboard**', { timeout: 300000 }).catch(() => undefined);
+
+    try {
+      await page.waitForSelector('div.side-navigator-label:has-text("Jobs")', { timeout: 300000 });
+    } catch (error) {
+      const currentUrl = page.url();
+      logger.warn(`Dashboard element not visible. Current URL: ${currentUrl}`);
+
+      const artifactsDir = path.join(process.cwd(), 'artifacts', 'dashboard');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const screenshotPath = path.join(artifactsDir, `dashboard-timeout-${stamp}.png`);
+      const htmlPath = path.join(artifactsDir, `dashboard-timeout-${stamp}.html`);
+
+      try {
+        await fs.mkdir(artifactsDir, { recursive: true });
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        logger.warn(`Saved dashboard screenshot: ${screenshotPath}`);
+      } catch (captureError) {
+        logger.warn(
+          `Failed to capture dashboard screenshot: ${captureError instanceof Error ? captureError.message : String(captureError)}`
+        );
+      }
+
+      try {
+        const html = await page.content();
+        await fs.writeFile(htmlPath, html, 'utf8');
+        logger.warn(`Saved dashboard HTML: ${htmlPath}`);
+      } catch (captureError) {
+        logger.warn(
+          `Failed to capture dashboard HTML: ${captureError instanceof Error ? captureError.message : String(captureError)}`
+        );
+      }
+
+      throw error;
+    }
     await humanClick(page, page.locator('div.side-navigator-label:has-text("Jobs")').first());
 
     logger.action('Navigating to job listing...');
-    await page.waitForURL('**/job-listing**', { timeout: 60000 });
+    await page.waitForURL('**/job-listing**', { timeout: 300000 });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     if (options.signal?.aborted || abortRequested) {

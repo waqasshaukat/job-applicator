@@ -60,7 +60,7 @@ export async function scrapeMatchAndApply(
   let foundSelector: string | null = null;
   for (const selector of jobCardSelectors) {
     try {
-      await page.waitForSelector(selector, { timeout: 5000 });
+      await page.waitForSelector(selector, { timeout: 300000 });
       foundSelector = selector;
       logger.debug(`Found job cards with selector: ${selector}`);
       break;
@@ -85,7 +85,7 @@ export async function scrapeMatchAndApply(
 
     // One more try
     try {
-      await page.waitForSelector('a.ui.fluid.card', { timeout: 10000 });
+      await page.waitForSelector('a.ui.fluid.card', { timeout: 300000 });
       foundSelector = 'a.ui.fluid.card';
     } catch {
       logger.error('Still no job cards found after scrolling');
@@ -282,7 +282,7 @@ async function clickJobCardAndNavigate(page: Page, title: string): Promise<Page 
 
         // Click and wait for new tab to open
         const [newPage] = await Promise.all([
-          context.waitForEvent('page', { timeout: 15000 }),
+          context.waitForEvent('page', { timeout: 300000 }),
           card.click()
         ]);
 
@@ -357,7 +357,7 @@ async function scrapeJobsFromPage(
 
   // Wait for job cards to appear
   try {
-    await page.waitForSelector('a.ui.fluid.card', { timeout: 10000 });
+    await page.waitForSelector('a.ui.fluid.card', { timeout: 300000 });
   } catch {
     logger.warn('Job cards not found, trying alternative selectors...');
   }
@@ -716,7 +716,7 @@ async function scrollAndWaitForNewListings(page: Page): Promise<void> {
     await page.waitForFunction(
       (prevCount) => document.querySelectorAll('a.ui.fluid.card').length > prevCount,
       initialCount,
-      { timeout: 5000 }
+      { timeout: 300000 }
     );
     logger.debug('New listings loaded');
   } catch {
@@ -814,7 +814,7 @@ export async function clickApplyButton(page: Page): Promise<boolean> {
 
   try {
     const button = page.locator('button:has-text("Apply")');
-    await button.waitFor({ state: 'visible', timeout: 5000 });
+    await button.waitFor({ state: 'visible', timeout: 300000 });
     await humanScrollToElement(page, button);
     await humanClick(page, button);
     logger.success('Clicked Apply button');

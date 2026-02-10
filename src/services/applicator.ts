@@ -89,7 +89,7 @@ export async function applyOnCurrentPage(
 async function clickJobCardByTitle(page: Page, title: string): Promise<boolean> {
   try {
     // Wait for job cards to appear
-    await page.waitForSelector('a.ui.fluid.card', { timeout: 10000 });
+    await page.waitForSelector('a.ui.fluid.card', { timeout: 300000 });
 
     const jobCards = await page.$$('a.ui.fluid.card');
     logger.debug(`Found ${jobCards.length} job cards`);
@@ -282,7 +282,7 @@ async function clickSnaphuntApplyButton(page: Page): Promise<boolean> {
 
   try {
     const button = page.locator('button:has-text("Apply")');
-    await button.waitFor({ state: 'visible', timeout: 5000 });
+    await button.waitFor({ state: 'visible', timeout: 300000 });
     await humanScrollToElement(page, button);
     await humanClick(page, button);
     logger.debug('Clicked Apply button');
@@ -302,7 +302,7 @@ async function waitForSnaphuntModal(page: Page): Promise<boolean> {
   try {
     await page.locator('div.ui.modal.visible.active').waitFor({
       state: 'visible',
-      timeout: 8000
+      timeout: 300000
     });
     logger.debug('Modal detected');
     return true;
@@ -320,7 +320,7 @@ async function clickSnaphuntSubmitButton(page: Page): Promise<boolean> {
 
   try {
     const button = page.locator('div.ui.modal.visible.active button[type="submit"]');
-    await button.waitFor({ state: 'visible', timeout: 5000 });
+    await button.waitFor({ state: 'visible', timeout: 300000 });
     await humanScrollToElement(page, button);
     await humanDelay(500, 800);
     await humanClick(page, button);
@@ -339,7 +339,7 @@ async function checkApplicationSuccess(page: Page): Promise<boolean> {
   try {
     // Wait for success popup to appear (contains "submitted" text)
     const successModal = page.locator('div.ui.modal.visible.active:has-text("submitted")');
-    await successModal.waitFor({ state: 'visible', timeout: 5000 });
+    await successModal.waitFor({ state: 'visible', timeout: 300000 });
     logger.debug('Success popup appeared');
 
     // Click the X button to close the popup
@@ -354,7 +354,7 @@ async function checkApplicationSuccess(page: Page): Promise<boolean> {
     const trackModal = page.locator(
       'div.ui.modal.visible.active div.visible.content:has-text("Track application")'
     );
-    const trackVisible = await trackModal.isVisible({ timeout: 1000 }).catch(() => false);
+    const trackVisible = await trackModal.isVisible({ timeout: 300000 }).catch(() => false);
     if (trackVisible) {
       logger.success('Already applied: Track application popup appeared');
 
@@ -370,7 +370,7 @@ async function checkApplicationSuccess(page: Page): Promise<boolean> {
     // Check if there's an error in the modal
     const hasError = await page
       .locator('div.ui.modal.visible.active .error, div.ui.modal.visible.active [class*="error"]')
-      .isVisible({ timeout: 1000 })
+      .isVisible({ timeout: 300000 })
       .catch(() => false);
 
     if (hasError) {
@@ -396,7 +396,7 @@ export async function handleLoginIfRequired(
 
   // Check for login popup or Sign in link
   const signInLink = page.locator('a:has-text("Sign in"), button:has-text("Sign in")').first();
-  const loginRequired = await signInLink.isVisible({ timeout: 3000 }).catch(() => false);
+  const loginRequired = await signInLink.isVisible({ timeout: 300000 }).catch(() => false);
 
   if (!loginRequired) {
     logger.success('User is already logged in');
@@ -418,7 +418,7 @@ export async function handleLoginIfRequired(
     await humanDelay(1500, 2500);
 
     // Wait for login popup to appear
-    await page.locator('div.LoginFlow').waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('div.LoginFlow').waitFor({ state: 'visible', timeout: 300000 });
     logger.debug('Login popup appeared');
     await humanDelay(500, 1000);
 
@@ -434,7 +434,7 @@ export async function handleLoginIfRequired(
 
     // Click "Let's go!" button (it's a div, not a button)
     const letsGoButton = page.locator('div[data-gtm-id="letsgo"]');
-    await letsGoButton.waitFor({ state: 'visible', timeout: 3000 });
+    await letsGoButton.waitFor({ state: 'visible', timeout: 300000 });
     await humanClick(page, letsGoButton);
     logger.debug('Clicked Let\'s go! button');
 
@@ -444,7 +444,7 @@ export async function handleLoginIfRequired(
     // Check if login was successful - login popup should be gone
     const popupStillOpen = await page
       .locator('div.LoginFlow')
-      .isVisible({ timeout: 2000 })
+      .isVisible({ timeout: 300000 })
       .catch(() => false);
 
     if (!popupStillOpen) {
@@ -465,12 +465,12 @@ export async function signOutSnaphunt(page: Page): Promise<void> {
 
   try {
     const profileIcon = page.locator('i.icon.sh-circle-10-1.css-hfm1bj').first();
-    await profileIcon.waitFor({ state: 'visible', timeout: 5000 });
+    await profileIcon.waitFor({ state: 'visible', timeout: 300000 });
     await humanClick(page, profileIcon);
     await humanDelay(500, 1000);
 
     const logoutItem = page.locator('div:has-text("Logout")').first();
-    await logoutItem.waitFor({ state: 'visible', timeout: 5000 });
+    await logoutItem.waitFor({ state: 'visible', timeout: 300000 });
     await humanClick(page, logoutItem);
     await humanDelay(1500, 2500);
 
