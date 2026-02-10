@@ -1,0 +1,12 @@
+node_modules/
+dist/
+web/
+resume/
+.env
+.env.local
+.env.example
+*.log
+.git/
+.gitignore
+DEPLOYMENT.md
+IMPLEMENTATION_PLAN.md

@@ -1,3 +1,6 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import type { ConsoleMessage, Request } from 'playwright';
 import { createBotConfig } from './config.js';
 import { logger } from './utils/logger.js';
 import { launchBrowser, closeBrowser, getPage } from './services/browser.js';
@@ -78,7 +81,75 @@ export async function runBot(options: RunBotOptions): Promise<{
     const page = await getPage();
 
     logger.action('Navigating to https://snaphunt.com/');
-    await page.goto('https://snaphunt.com/', { waitUntil: 'domcontentloaded', timeout: 180000 });
+
+    const failedRequests: string[] = [];
+    const consoleErrors: string[] = [];
+    const maxDiagnostics = 20;
+    const onRequestFailed = (request: Request) => {
+      if (failedRequests.length >= maxDiagnostics) return;
+      const failure = request.failure()?.errorText ?? 'unknown error';
+      failedRequests.push(`${request.method()} ${request.url()} - ${failure}`);
+    };
+    const onConsole = (message: ConsoleMessage) => {
+      if (consoleErrors.length >= maxDiagnostics) return;
+      if (message.type() === 'error') {
+        consoleErrors.push(message.text());
+      }
+    };
+
+    page.on('requestfailed', onRequestFailed);
+    page.on('console', onConsole);
+
+    const navigationStart = Date.now();
+    try {
+      const response = await page.goto('https://snaphunt.com/', {
+        waitUntil: 'domcontentloaded',
+        timeout: 300000,
+      });
+      const elapsedMs = Date.now() - navigationStart;
+      const status = response?.status() ?? 'no response';
+      logger.debug(`Navigation response status: ${status} (${elapsedMs}ms)`);
+    } catch (error) {
+      const elapsedMs = Date.now() - navigationStart;
+      logger.error(`Navigation failed after ${elapsedMs}ms: ${error instanceof Error ? error.message : String(error)}`);
+
+      const artifactsDir = path.join(process.cwd(), 'artifacts', 'navigation');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const screenshotPath = path.join(artifactsDir, `snaphunt-timeout-${stamp}.png`);
+      const htmlPath = path.join(artifactsDir, `snaphunt-timeout-${stamp}.html`);
+
+      try {
+        await fs.mkdir(artifactsDir, { recursive: true });
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        logger.warn(`Saved timeout screenshot: ${screenshotPath}`);
+      } catch (captureError) {
+        logger.warn(
+          `Failed to capture screenshot: ${captureError instanceof Error ? captureError.message : String(captureError)}`
+        );
+      }
+
+      try {
+        const html = await page.content();
+        await fs.writeFile(htmlPath, html, 'utf8');
+        logger.warn(`Saved timeout HTML: ${htmlPath}`);
+      } catch (captureError) {
+        logger.warn(
+          `Failed to capture HTML: ${captureError instanceof Error ? captureError.message : String(captureError)}`
+        );
+      }
+
+      if (failedRequests.length > 0) {
+        logger.warn(`Failed requests (sample): ${failedRequests.join(' | ')}`);
+      }
+      if (consoleErrors.length > 0) {
+        logger.warn(`Console errors (sample): ${consoleErrors.join(' | ')}`);
+      }
+
+      throw error;
+    } finally {
+      page.off('requestfailed', onRequestFailed);
+      page.off('console', onConsole);
+    }
     await page.waitForLoadState('networkidle', { timeout: 90000 }).catch(() => undefined);
     logger.success('Home page loaded');
 

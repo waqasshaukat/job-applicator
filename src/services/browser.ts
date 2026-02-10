@@ -72,7 +72,7 @@ export async function navigateTo(url: string, retries = 2): Promise<void> {
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 180000 });
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 300000 });
       logger.success('Page loaded');
       return;
     } catch (error) {
