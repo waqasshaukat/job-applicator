@@ -56,7 +56,6 @@ export async function runBot(options: RunBotOptions): Promise<{
 
   logger.info(`Job URL: ${config.jobListingUrl}`);
   logger.info(`Max applications: ${config.maxApplications ?? 'all available'}`);
-  logger.info(`Niches: ${config.jobNiches.slice(0, 5).join(', ')}...`);
   if (options.dryRun) {
     logger.warn('DRY RUN MODE - No applications will be submitted');
   }
