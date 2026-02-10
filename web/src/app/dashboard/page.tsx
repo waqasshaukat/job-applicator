@@ -166,7 +166,7 @@ export default function DashboardPage() {
     };
 
     pollLogs();
-    pollTimer = setInterval(pollLogs, 5000);
+    pollTimer = setInterval(pollLogs, 10000);
 
     return () => {
       cancelled = true;
