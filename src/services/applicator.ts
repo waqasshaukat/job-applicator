@@ -423,17 +423,17 @@ export async function handleLoginIfRequired(
     await humanDelay(500, 1000);
 
     // Fill email field
-    const emailField = page.locator('div.Login-inputContainer input').first();
+    const emailField = page.locator('input[placeholder="Email"]').first();
     await humanFillInput(page, emailField, email);
     await humanDelay(300, 600);
 
     // Fill password field
-    const passwordField = page.locator('div.Login-inputContainer input[type="password"]');
+    const passwordField = page.locator('input[placeholder="Password"][type="password"]');
     await humanFillInput(page, passwordField, password);
     await humanDelay(300, 600);
 
     // Click "Let's go!" button (it's a div, not a button)
-    const letsGoButton = page.locator('div[data-gtm-id="letsgo"]');
+    const letsGoButton = page.getByRole('button', { name: "Let's go!" });
     await letsGoButton.waitFor({ state: 'visible', timeout: 300000 });
     await humanClick(page, letsGoButton);
     logger.debug('Clicked Let\'s go! button');
